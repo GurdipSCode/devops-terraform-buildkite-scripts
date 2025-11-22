@@ -42,6 +42,7 @@ $scanResults = @{
     KICS = @{ Status = "skipped"; High = 0; Medium = 0; Low = 0 }
     Semgrep = @{ Status = "skipped"; High = 0; Medium = 0; Low = 0 }
     Mondoo = @{ Status = "skipped"; High = 0; Medium = 0; Low = 0 }
+    GitGuardian = @{ Status = "skipped"; High = 0; Medium = 0; Low = 0 }
 }
 
 $totalHigh = 0
@@ -381,8 +382,109 @@ else {
 Write-Host ""
 
 # ============================================
-# SUMMARY
+# GITGUARDIAN (Secret Scanning)
 # ============================================
+Write-Host "--- 🔍 Running GitGuardian (Secret Scanning)"
+
+if (Get-Command "ggshield" -ErrorAction SilentlyContinue) {
+    try {
+        $ggOutput = "$OutputDir/gitguardian-results.json"
+        
+        # Check if GitGuardian is configured
+        if ($env:GITGUARDIAN_API_KEY) {
+            # Run ggshield secret scan
+            $ggResult = ggshield secret scan path . `
+                --json `
+                --output $ggOutput `
+                --recursive `
+                --show-secrets `
+                2>&1
+            
+            $ggExitCode = $LASTEXITCODE
+            
+            if (Test-Path $ggOutput) {
+                $ggData = Get-Content $ggOutput | ConvertFrom-Json
+                
+                # Count secrets found
+                $secretsFound = 0
+                $highCount = 0
+                $mediumCount = 0
+                $lowCount = 0
+                
+                if ($ggData.scans) {
+                    foreach ($scan in $ggData.scans) {
+                        if ($scan.incidents) {
+                            $secretsFound += $scan.incidents.Count
+                            foreach ($incident in $scan.incidents) {
+                                # GitGuardian classifies by detector, we'll treat all as high
+                                $highCount++
+                            }
+                        }
+                    }
+                }
+                
+                $scanResults.GitGuardian = @{
+                    Status = "completed"
+                    High = $highCount
+                    Medium = $mediumCount
+                    Low = $lowCount
+                    SecretsFound = $secretsFound
+                }
+                
+                if ($secretsFound -gt 0) {
+                    Write-Host "  ⚠ GitGuardian completed - SECRETS FOUND!" -ForegroundColor Red
+                    Write-Host "    Secrets detected: $secretsFound" -ForegroundColor Red
+                }
+                else {
+                    Write-Host "  ✓ GitGuardian completed - No secrets found" -ForegroundColor Green
+                }
+                Write-Host "    Results: $ggOutput"
+            }
+            else {
+                # No output file but scan completed
+                if ($ggExitCode -eq 0) {
+                    $scanResults.GitGuardian = @{
+                        Status = "completed"
+                        High = 0
+                        Medium = 0
+                        Low = 0
+                        SecretsFound = 0
+                    }
+                    Write-Host "  ✓ GitGuardian completed - No secrets found" -ForegroundColor Green
+                }
+                else {
+                    Write-Host "  ⚠ GitGuardian scan had issues" -ForegroundColor Yellow
+                    $scanResults.GitGuardian.Status = "error"
+                }
+            }
+        }
+        else {
+            Write-Host "  ⚠ GitGuardian API key not configured" -ForegroundColor Yellow
+            Write-Host "    Set GITGUARDIAN_API_KEY environment variable" -ForegroundColor Yellow
+            Write-Host "    Get your API key from: https://dashboard.gitguardian.com/api/personal-access-tokens" -ForegroundColor Yellow
+            
+            # Try running in offline mode if available
+            Write-Host "    Attempting offline scan..."
+            $ggResult = ggshield secret scan path . --json --output $ggOutput 2>&1
+            
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $ggOutput)) {
+                Write-Host "  ✓ GitGuardian offline scan completed" -ForegroundColor Green
+                $scanResults.GitGuardian.Status = "completed-limited"
+            }
+        }
+    }
+    catch {
+        Write-Host "  ⚠ GitGuardian error: $_" -ForegroundColor Yellow
+        $scanResults.GitGuardian.Status = "error"
+    }
+}
+else {
+    Write-Host "  ⚠ GitGuardian (ggshield) not installed" -ForegroundColor Yellow
+    Write-Host "    Install: pip install ggshield" -ForegroundColor Yellow
+    Write-Host "    Or: pipx install ggshield" -ForegroundColor Yellow
+}
+
+Write-Host ""
 Write-Host "========================================"
 Write-Host "📊 Security Scan Summary"
 Write-Host "========================================"
@@ -401,7 +503,7 @@ foreach ($scanner in $scanResults.Keys) {
 Write-Host "Scanner        Status          High    Medium    Low"
 Write-Host "─────────────────────────────────────────────────────"
 
-foreach ($scanner in @("Checkov", "Tfsec", "KICS", "Semgrep", "Mondoo")) {
+foreach ($scanner in @("Checkov", "Tfsec", "KICS", "Semgrep", "Mondoo", "GitGuardian")) {
     $result = $scanResults[$scanner]
     $status = $result.Status.PadRight(15)
     $high = "$($result.High)".PadLeft(4)
@@ -486,6 +588,7 @@ if (Get-Command "buildkite-agent" -ErrorAction SilentlyContinue) {
 | KICS | $($scanResults.KICS.Status) | $($scanResults.KICS.High) | $($scanResults.KICS.Medium) | $($scanResults.KICS.Low) |
 | Semgrep | $($scanResults.Semgrep.Status) | $($scanResults.Semgrep.High) | $($scanResults.Semgrep.Medium) | $($scanResults.Semgrep.Low) |
 | Mondoo | $($scanResults.Mondoo.Status) | $($scanResults.Mondoo.High) | $($scanResults.Mondoo.Medium) | $($scanResults.Mondoo.Low) |
+| GitGuardian | $($scanResults.GitGuardian.Status) | $($scanResults.GitGuardian.High) | $($scanResults.GitGuardian.Medium) | $($scanResults.GitGuardian.Low) |
 | **TOTAL** | | **$totalHigh** | **$totalMedium** | **$totalLow** |
 
 "@
