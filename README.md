@@ -82,3 +82,132 @@ This repository contains Terraform infrastructure-as-code that deploys and manag
 ---
 
 ## 🏛️ Architecture
+
+## 🏛️ Architecture
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Buildkite CI/CD                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │
+│  │ Validation   │→ │  Security    │→ │  Deployment  │        │
+│  │ & Formatting │  │  Scanning    │  │  Pipeline    │        │
+│  └──────────────┘  └──────────────┘  └──────────────┘        │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                 ┌───────────┴───────────┐
+                 ▼                       ▼
+        ┌─────────────────┐     ┌─────────────────┐
+        │  HashiCorp      │     │  Clivern Lynx   │
+        │  Vault          │     │  State Backend  │
+        │  (Secrets)      │     │  (HTTP + Lock)  │
+        └─────────────────┘     └─────────────────┘
+                 │                       │
+                 └───────────┬───────────┘
+                             ▼
+                    ┌─────────────────┐
+                    │   Cloud         │
+                    │   Infrastructure│
+                    │   (AWS/Azure)   │
+                    └─────────────────┘
+```
+
+---
+
+## 📦 Prerequisites
+
+### Required Tools
+
+| Tool | Minimum Version | Purpose |
+|------|----------------|---------|
+| [OpenTofu](https://opentofu.org/) | 1.6.0+ | Infrastructure provisioning |
+| [PowerShell](https://github.com/PowerShell/PowerShell) | 7.0+ | Script execution |
+| [Buildkite Agent](https://buildkite.com/docs/agent/v3) | 3.x+ | CI/CD pipeline execution |
+| [Vault CLI](https://www.vaultproject.io/downloads) | 1.15.0+ | Secret management |
+
+### Optional Tools
+
+| Tool | Purpose |
+|------|---------|
+| [Fabric AI](https://github.com/danielmiessler/fabric) | AI-powered plan analysis |
+| [Overmind CLI](https://overmind.tech/) | Blast radius analysis |
+| [terraform-docs](https://terraform-docs.io/) | Documentation generation |
+
+### Access Requirements
+
+- ✅ HashiCorp Vault access with JWT authentication
+- ✅ Clivern Lynx HTTP backend endpoint
+- ✅ Buildkite organization and pipeline
+- ✅ Cloud provider credentials (AWS/Azure/GCP)
+- ✅ Mondoo service account token
+
+---
+
+## 🚀 Quick Start
+
+### 1. Clone Repository
+```bash
+git clone https://github.com/yourorg/terraform-infrastructure.git
+cd terraform-infrastructure
+```
+
+### 2. Configure Pipeline
+
+Edit `.buildkite/pipeline.yml`:
+```yaml
+env:
+  PROJECT_NAME: "my-infrastructure"
+  SERVICE_NAME: "my-service"
+  TARGET_ENVIRONMENTS: "dev,stg,prd"
+  VAULT_NAMESPACE: "DevOps/prd/my-project"
+  LYNX_BASE_URL: "https://lynx.company.com"
+```
+
+### 3. Set Up Vault Secrets
+```bash
+# Lynx backend credentials
+vault kv put secret/lynx/terraform \
+  username="terraform-user" \
+  password="secure-password"
+
+# Mondoo token
+vault kv put secret/mondoo \
+  token="your-mondoo-token"
+```
+
+### 4. Create Environment Directories
+```bash
+mkdir -p dev stg prd
+cd dev
+
+cat > main.tf <<EOF
+terraform {
+  required_version = ">= 1.6.0"
+  
+  backend "http" {
+    # Configured by Initialize-TofuBackend
+  }
+}
+
+module "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "~> 5.0"
+  
+  name = "my-vpc"
+  cidr = "10.0.0.0/16"
+}
+EOF
+```
+
+### 5. Commit and Push
+```bash
+git add .
+git commit -m "feat: initial infrastructure setup"
+git push origin main
+```
+
+### 6. Watch Pipeline Execute
+
+Visit your Buildkite dashboard to see the pipeline run! 🎉
+
+---
+
+## 📁 Project Structure
