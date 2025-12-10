@@ -3,6 +3,7 @@
 [![Buildkite](https://badge.buildkite.com/your-pipeline-id.svg)](https://buildkite.com/yourorg/your-pipeline)
 [![Terraform](https://img.shields.io/badge/Terraform-1.6+-623CE4?logo=terraform&logoColor=white)](https://www.terraform.io/)
 [![OpenTofu](https://img.shields.io/badge/OpenTofu-1.6+-FFDA18?logo=opentofu&logoColor=black)](https://opentofu.org/)
+[![Semgrep](https://img.shields.io/badge/Semgrep-Enabled-blueviolet?logo=semgrep&logoColor=white)](https://semgrep.dev/)
 [![License](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
 [![Maintained](https://img.shields.io/badge/Maintained-Yes-green.svg)](https://github.com/yourorg/terraform-infrastructure)
 
