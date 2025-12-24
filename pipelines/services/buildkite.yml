@@ -31,21 +31,27 @@ env:
   # ====================
   VAULT_NAMESPACE: "{{vault_namespace}}"     # e.g., "DevOps/prd/app-infrastructure"
   VAULT_ADDR: "{{vault_addr}}"               # e.g., "http://vault.gssira.com:8200"
+  VAULT_AUTH_PATH: "{{vault_auth_path}}"     # e.g., "jwt-buildkite" (the JWT auth mount path)
+  VAULT_AUTH_ROLE: "{{vault_auth_role}}"     # e.g., "terraform-pipeline"
   LYNX_BASE_URL: "{{lynx_url}}"              # e.g., "https://lynx.company.com"
   BACKUP_RETENTION_DAYS: "30"
   
   # ====================
+  # PROVIDER CONFIGURATION
+  # ====================
+  REQUIRED_PROVIDERS: "{{required_providers}}"  # e.g., "mondoo,netlify,aws,azure"
+  
+  # ====================
   # MODULE CONFIGURATION
   # ====================
-  # If your modules are in private registry/repos
   MODULE_REGISTRY_URL: "{{module_registry}}"  # e.g., "registry.terraform.io/yourorg"
   MODULE_VERSION_CONSTRAINT: "{{module_version}}"  # e.g., ">= 1.0.0, < 2.0.0"
   
   # ====================
   # HELPER SCRIPTS CONFIGURATION
   # ====================
-  HELPER_SCRIPTS_REPO: "{{helper_scripts_repo}}"  # e.g., "git@github.com:yourorg/terraform-helper-scripts.git"
-  HELPER_SCRIPTS_REF: "{{helper_scripts_ref}}"    # e.g., "main" or "v1.2.0"
+  HELPER_SCRIPTS_REPO: "{{helper_scripts_repo}}"
+  HELPER_SCRIPTS_REF: "{{helper_scripts_ref}}"
   
   # ====================
   # FEATURE FLAGS
@@ -56,17 +62,64 @@ env:
 
 steps:
   # ============================================================================
-  # PHASE 0: SETUP - CHECKOUT HELPER SCRIPTS
+  # PHASE 0: SETUP
   # ============================================================================
   
-  - label: ":git: Checkout Helper Scripts"
-    key: "checkout-helpers"
-    commands:
-      - |
-        if (Test-Path ".\\scripts") { Remove-Item -Recurse -Force ".\\scripts" }
-        git clone --depth 1 --branch $env:HELPER_SCRIPTS_REF $env:HELPER_SCRIPTS_REPO .\\scripts
-    agents:
-      queue: "windows"
+  - group: "🔧 Setup Phase"
+    key: "setup-phase"
+    steps:
+      
+      - label: ":git: Checkout Helper Scripts"
+        key: "checkout-helpers"
+        commands:
+          - |
+            if (Test-Path ".\\scripts") { Remove-Item -Recurse -Force ".\\scripts" }
+            git clone --depth 1 --branch $env:HELPER_SCRIPTS_REF $env:HELPER_SCRIPTS_REPO .\\scripts
+        agents:
+          queue: "windows"
+
+      - label: ":vault: Fetch Secrets via OIDC"
+        key: "fetch-secrets"
+        commands:
+          - |
+            # Request OIDC token from Buildkite agent
+            $oidcToken = buildkite-agent oidc request-token --audience "$env:VAULT_ADDR"
+            
+            # Authenticate to Vault using JWT auth method
+            $authResponse = Invoke-RestMethod -Uri "$env:VAULT_ADDR/v1/auth/$env:VAULT_AUTH_PATH/login" `
+              -Method POST `
+              -ContentType "application/json" `
+              -Body (@{ role = $env:VAULT_AUTH_ROLE; jwt = $oidcToken } | ConvertTo-Json)
+            
+            $vaultToken = $authResponse.auth.client_token
+            $headers = @{ "X-Vault-Token" = $vaultToken }
+            
+            # Create secrets directory
+            New-Item -ItemType Directory -Force -Path ".\\secrets\\providers" | Out-Null
+            
+            # Fetch Lynx credentials
+            $lynxSecrets = Invoke-RestMethod -Uri "$env:VAULT_ADDR/v1/$env:VAULT_NAMESPACE/data/lynx" `
+              -Headers $headers
+            $lynxSecrets.data.data | ConvertTo-Json | Out-File ".\\secrets\\lynx.json"
+            
+            # Fetch provider credentials
+            $providers = $env:REQUIRED_PROVIDERS -split ","
+            foreach ($provider in $providers) {
+              $provider = $provider.Trim()
+              try {
+                $secrets = Invoke-RestMethod -Uri "$env:VAULT_ADDR/v1/$env:VAULT_NAMESPACE/data/providers/$provider" `
+                  -Headers $headers
+                $secrets.data.data | ConvertTo-Json | Out-File ".\\secrets\\providers\\$provider.json"
+                Write-Host "✅ Fetched secrets for $provider"
+              } catch {
+                Write-Warning "⚠️ No secrets found for $provider"
+              }
+            }
+        artifact_paths:
+          - ".secrets/**/*"
+        agents:
+          queue: "windows"
+        depends_on: "checkout-helpers"
 
   # ============================================================================
   # PHASE 1: BUILD & VALIDATION
@@ -74,7 +127,7 @@ steps:
   
   - group: "📦 Build & Validation Phase"
     key: "build-phase"
-    depends_on: "checkout-helpers"
+    depends_on: "setup-phase"
     steps:
       
       - label: ":hammer: Code Formatting Check"
@@ -91,7 +144,11 @@ steps:
 
       - label: ":shield: Security Scanning"
         key: "security-scan"
-        command: "powershell -File .\\scripts\\Run-SecurityScanning.ps1"
+        commands:
+          - buildkite-agent artifact download ".secrets/**/*" .
+          - |
+            powershell -File .\\scripts\\Run-SecurityScanning.ps1 `
+              -MondooCredsFile ".\\secrets\\providers\\mondoo.json"
         artifact_paths:
           - "security-reports/**/*"
         agents:
@@ -117,6 +174,11 @@ steps:
   - label: ":pipeline: Generate Environment Pipelines"
     key: "generate-pipelines"
     depends_on: "build-phase"
-    command: "powershell -File .\\scripts\\Generate-EnvironmentPipelines.ps1"
+    commands:
+      - buildkite-agent artifact download ".secrets/**/*" .
+      - |
+        powershell -File .\\scripts\\Generate-EnvironmentPipelines.ps1 `
+          -LynxCredsFile ".\\secrets\\lynx.json" `
+          -ProviderSecretsDir ".\\secrets\\providers"
     agents:
       queue: "windows"
