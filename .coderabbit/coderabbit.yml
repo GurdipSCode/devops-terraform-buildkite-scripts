@@ -1,1 +1,25 @@
+version: 1
+
+# CodeRabbit configuration
+projects:
+  buildkite-pipelines:
+    path: "./pipelines"   # Directory containing your Buildkite pipeline YAMLs
+    language: yaml        # Pipeline files are YAML
+    linters:
+      - id: yaml-lint
+        description: "Validate YAML syntax for Buildkite pipelines"
+        command: |
+          yamllint -d "{extends: relaxed, rules: {line-length: {max: 120}}}" .
+      - id: buildkite-schema
+        description: "Validate Buildkite pipeline schema"
+        command: |
+          buildkite-agent pipeline validate .
+    ignore:
+      - "vendor/**"
+      - "*.lock.yml"
+
+# Optional global settings
+settings:
+  fail_on_warning: true
+  concurrency: 2
 
