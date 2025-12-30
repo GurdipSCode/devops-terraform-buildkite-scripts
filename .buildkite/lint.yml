@@ -3,4 +3,4 @@ steps:
     key: lint-buildkite-pipelines
     agents:
       queue: OpenTofu
-    command: "powershell -NoProfile -ExecutionPolicy Bypass -File .buildkite/scripts/Test-BuildkitePipelines.ps1"
+    command: "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Location $$env:BUILDKITE_BUILD_CHECKOUT_PATH; & .\.buildkite\scripts\Test-BuildkitePipelines.ps1\""
