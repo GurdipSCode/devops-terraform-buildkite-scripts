@@ -1,25 +1,68 @@
-version: 1
+# .coderabbit.yaml
+# CodeRabbit configuration for PowerShell scripts
 
-# CodeRabbit configuration
-projects:
-  buildkite-pipelines:
-    path: "./pipelines"   # Directory containing your Buildkite pipeline YAMLs
-    language: yaml        # Pipeline files are YAML
-    linters:
-      - id: yaml-lint
-        description: "Validate YAML syntax for Buildkite pipelines"
-        command: |
-          yamllint -d "{extends: relaxed, rules: {line-length: {max: 120}}}" .
-      - id: buildkite-schema
-        description: "Validate Buildkite pipeline schema"
-        command: |
-          buildkite-agent pipeline validate .
-    ignore:
-      - "vendor/**"
-      - "*.lock.yml"
+language: en-US
 
-# Optional global settings
-settings:
-  fail_on_warning: true
-  concurrency: 2
+reviews:
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+      - develop
 
+  profile: assertive
+  request_changes_workflow: true
+  high_level_summary: true
+  review_status: true
+
+  path_instructions:
+    - path: "**/*.ps1"
+      instructions: |
+        Review PowerShell scripts for:
+        
+        **Security:**
+        - No hardcoded credentials, API keys, tokens, or secrets
+        - No passwords in plain text
+        - Use SecureString for sensitive data
+        - Validate and sanitize external inputs
+        - No Invoke-Expression with untrusted input
+        - Use HTTPS for all web requests
+        - Secrets not logged to console
+        
+        **Error Handling:**
+        - Use $ErrorActionPreference = "Stop"
+        - Try/catch for external tool calls (terraform, tfsec, etc.)
+        - Check $LASTEXITCODE after executables
+        - Meaningful error messages
+        - Appropriate exit codes for CI/CD
+        
+        **Best Practices:**
+        - Approved verbs (Get-, Set-, New-, Test-, Invoke-)
+        - Comment-based help (.SYNOPSIS, .DESCRIPTION, .PARAMETER)
+        - [CmdletBinding()] for advanced functions
+        - Full cmdlet names, no aliases
+        - [Parameter()] attributes
+        
+        **Code Quality:**
+        - Meaningful variable names
+        - No magic numbers
+        - No commented-out code
+        - No unused variables
+        - Consistent indentation
+        
+        **CI/CD:**
+        - Scripts are idempotent
+        - Clear success/failure output
+        - Return appropriate exit codes
+
+  tools:
+    shellcheck:
+      enabled: false
+    yamllint:
+      enabled: false
+    markdownlint:
+      enabled: false
+
+chat:
+  auto_reply: true
