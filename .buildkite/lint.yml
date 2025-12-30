@@ -2,7 +2,7 @@ steps:
   - label: ":lint-roller: Lint Buildkite pipelines (Schema + OPA)"
     key: lint-buildkite-pipelines
     agents:
-      queue: windows
+      queue: OpenTofu
     commands:
       - powershell -NoProfile -ExecutionPolicy Bypass -Command "
           $ErrorActionPreference = 'Stop'
