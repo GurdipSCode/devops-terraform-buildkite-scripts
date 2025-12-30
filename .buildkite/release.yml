@@ -5,7 +5,7 @@ steps:
   - label: ":shield: Lint Buildkite pipelines"
     key: lint
     agents:
-      queue: windows
+      queue: OpenTofu
     commands:
       - buildkite-agent pipeline upload .buildkite/lint.yml
 
@@ -16,7 +16,7 @@ steps:
     key: release
     depends_on: lint
     agents:
-      queue: windows
+      queue: OpenTofu
     commands:
       - powershell -NoProfile -ExecutionPolicy Bypass -Command "
           $ErrorActionPreference = 'Stop'
