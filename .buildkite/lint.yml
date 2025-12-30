@@ -40,7 +40,7 @@ steps:
 
           Write-Host '=== Linting Buildkite pipelines ==='
 
-          Get-ChildItem -Path .buildkite -Recurse -Include *.yml, *.yaml | ForEach-Object {
+          Get-ChildItem -Path pipelines -Recurse -Include *.yml, *.yaml | ForEach-Object {
             Write-Host ('🔍 Validating ' + $_.FullName)
 
             $jsonFile = $_.FullName + '.json'
