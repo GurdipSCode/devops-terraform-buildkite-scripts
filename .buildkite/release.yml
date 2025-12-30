@@ -1,0 +1,27 @@
+steps:
+  #
+  # Lint gate (schema + OPA)
+  #
+  - label: ":shield: Lint Buildkite pipelines"
+    key: lint
+    agents:
+      queue: windows
+    commands:
+      - buildkite-agent pipeline upload .buildkite/lint.yml
+
+  #
+  # Release / pipeline upload
+  #
+  - label: ":rocket: Release pipeline"
+    key: release
+    depends_on: lint
+    agents:
+      queue: windows
+    commands:
+      - powershell -NoProfile -ExecutionPolicy Bypass -Command "
+          $ErrorActionPreference = 'Stop'
+
+          Write-Host 'Uploading release pipeline...'
+
+          buildkite-agent pipeline upload .buildkite/pipelines/main.yml
+        "
