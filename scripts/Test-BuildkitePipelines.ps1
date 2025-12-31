@@ -3,26 +3,6 @@ $ErrorActionPreference = 'Stop'
 
 Write-Host "=== Checking prerequisites ===" -ForegroundColor Cyan
 
-if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    Write-Error "Node.js is required on this agent"
-    exit 1
-}
-
-# AJV + YAML
-if (-not (Get-Command ajv -ErrorAction SilentlyContinue)) {
-    Write-Host "AJV not found - installing ajv-cli and yaml..."
-    npm install -g ajv-cli yaml
-} else {
-    Write-Host "AJV already installed"
-}
-
-# OPA
-if (-not (Get-Command opa -ErrorAction SilentlyContinue)) {
-    Write-Host "OPA not found - installing via Chocolatey..."
-    choco install opa -y
-} else {
-    Write-Host "OPA already installed"
-}
 
 Write-Host "=== Downloading Buildkite schema ===" -ForegroundColor Cyan
 Invoke-WebRequest `
