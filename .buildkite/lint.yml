@@ -4,4 +4,4 @@ steps:
     agents:
       queue: OpenTofu
     commands:
-      - powershell -NoProfile -ExecutionPolicy Bypass -Command "$script = Join-Path $env:BUILDKITE_BUILD_CHECKOUT_PATH '.buildkite/scripts/Test-BuildkitePipelines.ps1'; & $script"
+      - powershell -NoProfile -ExecutionPolicy Bypass -Command "& (Join-Path $$env:BUILDKITE_BUILD_CHECKOUT_PATH '.buildkite/scripts/Test-BuildkitePipelines.ps1')"
