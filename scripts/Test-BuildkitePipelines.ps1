@@ -1,52 +1,67 @@
-# .buildkite/scripts/Test-BuildkitePipelines.ps1
+# scripts/Test-BuildkitePipelines.ps1
 $ErrorActionPreference = 'Stop'
 
 Write-Host "=== Checking prerequisites ===" -ForegroundColor Cyan
 
-
-Write-Host "=== Downloading Buildkite schema ===" -ForegroundColor Cyan
-Invoke-WebRequest `
-    -Uri "https://raw.githubusercontent.com/buildkite/pipeline-schema/main/schema.json" `
-    -OutFile "buildkite.schema.json"
+# Download Buildkite schema
+$schemaFile = "buildkite.schema.json"
+if (-not (Test-Path $schemaFile)) {
+    Write-Host "Downloading Buildkite schema..."
+    Invoke-WebRequest `
+        -Uri "https://raw.githubusercontent.com/buildkite/pipeline-schema/main/schema.json" `
+        -OutFile $schemaFile
+}
 
 Write-Host "=== Linting Buildkite pipelines ===" -ForegroundColor Cyan
 
 $failed = $false
-$pipelines = Get-ChildItem -Path "..\pipelines" -Recurse -Include "*.yml", "*.yaml"
+$pipelines = Get-ChildItem -Path "pipelines" -Recurse -Include "*.yml", "*.yaml" -ErrorAction SilentlyContinue
+
+if (-not $pipelines) {
+    Write-Host "[WARN] No pipeline files found in pipelines/" -ForegroundColor Yellow
+    exit 0
+}
 
 foreach ($file in $pipelines) {
-    Write-Host "[CHECK] Validating $($file.FullName)" -ForegroundColor White
-    
-    $jsonFile = "$($file.FullName).json"
-    
-    # Convert YAML to JSON
-    yaml2json $file.FullName | Out-File -Encoding utf8 $jsonFile
+    Write-Host ""
+    Write-Host "[CHECK] $($file.Name)" -ForegroundColor White
     
     # Schema validation
     Write-Host "  -> Schema validation" -ForegroundColor Gray
-    ajv validate -s buildkite.schema.json -d $jsonFile --strict=false
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  [FAIL] Schema validation failed" -ForegroundColor Red
+    $schemaResult = check-jsonschema --schemafile $schemaFile $file.FullName 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "  [PASS] Schema valid" -ForegroundColor Green
+    } else {
+        Write-Host "  [FAIL] Schema invalid" -ForegroundColor Red
+        Write-Host $schemaResult
         $failed = $true
     }
     
     # OPA policy validation
-    Write-Host "  -> OPA policy validation" -ForegroundColor Gray
-    opa eval --fail-defined --format pretty --data opa --input $jsonFile "data.buildkite.deny"
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  [FAIL] OPA validation failed" -ForegroundColor Red
-        $failed = $true
+    if (Test-Path "opa") {
+        Write-Host "  -> Policy validation" -ForegroundColor Gray
+        $policyResult = conftest test $file.FullName --policy opa 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  [PASS] Policies passed" -ForegroundColor Green
+        } else {
+            Write-Host "  [FAIL] Policy violations" -ForegroundColor Red
+            Write-Host $policyResult
+            $failed = $true
+        }
+    } else {
+        Write-Host "  [SKIP] No opa/ policy folder found" -ForegroundColor Yellow
     }
-    
-    # Cleanup
-    Remove-Item $jsonFile -ErrorAction SilentlyContinue
-}
-
-if ($failed) {
-    Write-Host ""
-    Write-Host "[FAILED] Pipeline validation failed" -ForegroundColor Red
-    exit 1
 }
 
 Write-Host ""
-Write-Host "[PASSED] All pipelines valid" -ForegroundColor Green
+if ($failed) {
+    Write-Host "========================================" -ForegroundColor Red
+    Write-Host "[FAILED] Pipeline validation failed" -ForegroundColor Red
+    Write-Host "========================================" -ForegroundColor Red
+    exit 1
+} else {
+    Write-Host "========================================" -ForegroundColor Green
+    Write-Host "[PASSED] All pipelines valid" -ForegroundColor Green
+    Write-Host "========================================" -ForegroundColor Green
+    exit 0
+}
