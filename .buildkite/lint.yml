@@ -1,9 +1,49 @@
 steps:
+  - label: ":shield: GitGuardian Scan"
+    key: gitguardian-scan
+    agents:
+      queue: OpenTofu
+    plugins:
+      - vault-secrets#v1.0.1:
+          server: "${VAULT_ADDR}"
+          auth:
+            method: jwt
+            role: buildkite-role
+            path: jwt
+          path: "secret/data/buildkite/gitguardian"
+          secret:
+            - env: GITGUARDIAN_API_KEY
+              field: api_key
+    commands:
+      - ggshield secret scan ci
+
   - label: ":lint-roller: Lint Buildkite pipelines (Schema + OPA)"
     key: lint-buildkite-pipelines
+    depends_on: gitguardian-scan
     agents:
       queue: OpenTofu
     commands:
       - cd ..
       - cd devops-terraform-buildkite-scripts/scripts
       - powershell -NoProfile -ExecutionPolicy Bypass -File Test-BuildkitePipelines.ps1
+
+  - label: ":bookmark: Generate Changelog (git-cliff)"
+    key: git-cliff-versioning
+    depends_on: lint-buildkite-pipelines
+    agents:
+      queue: OpenTofu
+    plugins:
+      - vault-secrets#v1.0.1:
+          server: "${VAULT_ADDR}"
+          auth:
+            method: jwt
+            role: buildkite-role
+            path: jwt
+          path: "secret/data/buildkite/git"
+          secret:
+            - env: GIT_TOKEN
+              field: token
+    commands:
+      - git-cliff --output CHANGELOG.md
+      - git-cliff --bumped-version
+    if: build.branch == "main"
