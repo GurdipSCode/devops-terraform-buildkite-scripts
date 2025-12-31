@@ -6,4 +6,4 @@ steps:
     commands:
       - cd ..
       - cd devops-terraform-buildkite-scripts/scripts
-      - powershell -NoProfile -ExecutionPolicy Bypass -File .buildkite\scripts\Test-BuildkitePipelines.ps1
+      - powershell -NoProfile -ExecutionPolicy Bypass -File Test-BuildkitePipelines.ps1
