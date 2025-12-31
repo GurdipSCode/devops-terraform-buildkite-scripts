@@ -5,5 +5,5 @@ steps:
       queue: OpenTofu
     commands:
       - cd ..
-      - dir .buildkite\scripts
+      - dir scripts
       - powershell -NoProfile -ExecutionPolicy Bypass -File .buildkite\scripts\Test-BuildkitePipelines.ps1
