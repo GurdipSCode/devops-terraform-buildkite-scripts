@@ -4,5 +4,4 @@ steps:
     agents:
       queue: OpenTofu
     commands:
-      - cd %BUILDKITE_BUILD_CHECKOUT_PATH%
-      - powershell -NoProfile -ExecutionPolicy Bypass -File .buildkite/scripts/Test-BuildkitePipelines.ps1
+      - powershell -NoProfile -ExecutionPolicy Bypass -File "%BUILDKITE_BUILD_CHECKOUT_PATH%/.buildkite/scripts/Test-BuildkitePipelines.ps1"
