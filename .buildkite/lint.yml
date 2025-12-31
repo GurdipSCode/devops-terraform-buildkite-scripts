@@ -5,5 +5,5 @@ steps:
       queue: OpenTofu
     commands:
       - cd ..
-      - dir scripts
+      - dir devops-terraform-buildkite-scripts/scripts
       - powershell -NoProfile -ExecutionPolicy Bypass -File .buildkite\scripts\Test-BuildkitePipelines.ps1
