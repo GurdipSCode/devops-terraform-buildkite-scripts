@@ -15,7 +15,7 @@ if (-not (Test-Path $schemaFile)) {
 Write-Host "=== Linting Buildkite pipelines ===" -ForegroundColor Cyan
 
 $failed = $false
-$pipelines = Get-ChildItem -Path "pipelines" -Recurse -Include "*.yml", "*.yaml" -ErrorAction SilentlyContinue
+$pipelines = Get-ChildItem -Path "../pipelines" -Recurse -Include "*.yml", "*.yaml" -ErrorAction SilentlyContinue
 
 if (-not $pipelines) {
     Write-Host "[WARN] No pipeline files found in pipelines/" -ForegroundColor Yellow
