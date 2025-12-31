@@ -12,7 +12,7 @@ Invoke-WebRequest `
 Write-Host "=== Linting Buildkite pipelines ===" -ForegroundColor Cyan
 
 $failed = $false
-$pipelines = Get-ChildItem -Path "pipelines" -Recurse -Include "*.yml", "*.yaml"
+$pipelines = Get-ChildItem -Path "..\pipelines" -Recurse -Include "*.yml", "*.yaml"
 
 foreach ($file in $pipelines) {
     Write-Host "[CHECK] Validating $($file.FullName)" -ForegroundColor White
