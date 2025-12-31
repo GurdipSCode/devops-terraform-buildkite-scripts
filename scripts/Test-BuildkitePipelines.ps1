@@ -35,7 +35,7 @@ $failed = $false
 $pipelines = Get-ChildItem -Path "pipelines" -Recurse -Include "*.yml", "*.yaml"
 
 foreach ($file in $pipelines) {
-    Write-Host "🔍 Validating $($file.FullName)" -ForegroundColor White
+    Write-Host "[CHECK] Validating $($file.FullName)" -ForegroundColor White
     
     $jsonFile = "$($file.FullName).json"
     
@@ -43,18 +43,18 @@ foreach ($file in $pipelines) {
     yaml2json $file.FullName | Out-File -Encoding utf8 $jsonFile
     
     # Schema validation
-    Write-Host "  → Schema validation" -ForegroundColor Gray
+    Write-Host "  -> Schema validation" -ForegroundColor Gray
     ajv validate -s buildkite.schema.json -d $jsonFile --strict=false
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "  ❌ Schema validation failed" -ForegroundColor Red
+        Write-Host "  [FAIL] Schema validation failed" -ForegroundColor Red
         $failed = $true
     }
     
     # OPA policy validation
-    Write-Host "  → OPA policy validation" -ForegroundColor Gray
+    Write-Host "  -> OPA policy validation" -ForegroundColor Gray
     opa eval --fail-defined --format pretty --data opa --input $jsonFile "data.buildkite.deny"
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "  ❌ OPA validation failed" -ForegroundColor Red
+        Write-Host "  [FAIL] OPA validation failed" -ForegroundColor Red
         $failed = $true
     }
     
@@ -64,9 +64,9 @@ foreach ($file in $pipelines) {
 
 if ($failed) {
     Write-Host ""
-    Write-Host "❌ Pipeline validation failed" -ForegroundColor Red
+    Write-Host "[FAILED] Pipeline validation failed" -ForegroundColor Red
     exit 1
 }
 
 Write-Host ""
-Write-Host "✅ All pipelines valid" -ForegroundColor Green
+Write-Host "[PASSED] All pipelines valid" -ForegroundColor Green
