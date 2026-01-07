@@ -1,0 +1,260 @@
+# .buildkite/pipeline.yml
+# Pipeline for Terraform MODULE Repositories
+# This pipeline is for repos that PUBLISH/PROVIDE Terraform modules
+# NOT for repos that consume modules
+
+env:
+  # ====================
+  # MODULE CONFIGURATION
+  # ====================
+  MODULE_NAME: "{{module_name}}"
+  MODULE_DESCRIPTION: "{{module_description}}"
+  
+  # ====================
+  # REGISTRY CONFIGURATION
+  # ====================
+  REGISTRY_TYPE: "{{registry_type}}"           # private, public, artifactory, terrareg
+  REGISTRY_URL: "{{registry_url}}"
+  REGISTRY_NAMESPACE: "{{registry_namespace}}"
+  
+  # ====================
+  # VAULT CONFIGURATION
+  # ====================
+  VAULT_ADDR: "{{vault_addr}}"
+  VAULT_NAMESPACE: "{{vault_namespace}}"
+  VAULT_AUTH_PATH: "jwt-buildkite"
+  VAULT_AUTH_ROLE: "terraform-modules"
+  
+  # ====================
+  # VERSIONING CONFIGURATION
+  # ====================
+  ENABLE_AUTO_BUMP: "true"
+  STABLE_BRANCH: "main"
+  PRERELEASE_BRANCHES: "develop,feature/*,release/*"
+  ENABLE_PR_VERSIONS: "true"
+  
+  # ====================
+  # TESTING CONFIGURATION
+  # ====================
+  TEST_TERRAFORM_VERSION: "1.6.0"
+  EXAMPLE_DIRS: "examples/basic,examples/complete"
+  
+  # ====================
+  # FEATURE FLAGS
+  # ====================
+  ENABLE_BREAKING_CHANGE_DETECTION: "true"
+  ENABLE_SECURITY_SCANNING: "true"
+  ENABLE_AUTO_DOCUMENTATION: "true"
+
+steps:
+  # ============================================================================
+  # PHASE 1: VALIDATION & LINTING
+  # ============================================================================
+  
+  - group: "Validation Phase"
+    key: "validation-phase"
+    steps:
+      
+      - label: ":terraform: Format Check"
+        key: "terraform-fmt"
+        command: "powershell -ExecutionPolicy Bypass -File .buildkite/scripts/validation/Test-TerraformFormat.ps1"
+        agents:
+          queue: "windows"
+
+      - label: ":terraform: Validate Module"
+        key: "terraform-validate"
+        command: "powershell -ExecutionPolicy Bypass -File .buildkite/scripts/validation/Test-TerraformValidate.ps1"
+        agents:
+          queue: "windows"
+
+      - label: ":lint: TFLint"
+        key: "tflint"
+        command: "powershell -ExecutionPolicy Bypass -File .buildkite/scripts/validation/Test-TFLint.ps1"
+        agents:
+          queue: "windows"
+        soft_fail: true
+
+      - label: ":conventional_commits: Validate Commits"
+        key: "validate-commits"
+        command: "powershell -ExecutionPolicy Bypass -File .buildkite/scripts/validation/Test-ConventionalCommits.ps1"
+        agents:
+          queue: "windows"
+        soft_fail: true
+
+  # ============================================================================
+  # PHASE 2: SECURITY SCANNING
+  # ============================================================================
+  
+  - group: "Security Phase"
+    key: "security-phase"
+    depends_on: "validation-phase"
+    if: build.env("ENABLE_SECURITY_SCANNING") == "true"
+    steps:
+      
+      - label: ":vault: Fetch Security Credentials"
+        key: "fetch-security-creds"
+        command: "powershell -ExecutionPolicy Bypass -File .buildkite/scripts/security/Get-VaultSecrets.ps1"
+        artifact_paths:
+          - ".secrets/**/*"
+        agents:
+          queue: "windows"
+
+      - label: ":gitguardian: Secret Scan"
+        key: "gitguardian-scan"
+        depends_on: "fetch-security-creds"
+        command: "powershell -ExecutionPolicy Bypass -File .buildkite/scripts/security/Test-GitGuardian.ps1"
+        agents:
+          queue: "windows"
+
+      - label: ":shield: Trivy Security Scan"
+        key: "trivy-scan"
+        command: "powershell -ExecutionPolicy Bypass -File .buildkite/scripts/security/Test-Trivy.ps1"
+        artifact_paths:
+          - "trivy-report.json"
+        agents:
+          queue: "windows"
+
+      - label: ":checkov: Checkov Scan"
+        key: "checkov-scan"
+        command: "powershell -ExecutionPolicy Bypass -File .buildkite/scripts/security/Test-Checkov.ps1"
+        agents:
+          queue: "windows"
+        soft_fail: true
+
+  # ============================================================================
+  # PHASE 3: TESTING
+  # ============================================================================
+  
+  - group: "Testing Phase"
+    key: "testing-phase"
+    depends_on: "security-phase"
+    steps:
+      
+      - label: ":terraform: Validate Examples"
+        key: "validate-examples"
+        command: "powershell -ExecutionPolicy Bypass -File .buildkite/scripts/testing/Test-Examples.ps1"
+        agents:
+          queue: "windows"
+
+      - label: ":terraform: Plan Examples"
+        key: "plan-examples"
+        depends_on: "validate-examples"
+        command: "powershell -ExecutionPolicy Bypass -File .buildkite/scripts/testing/New-ExamplePlan.ps1"
+        agents:
+          queue: "windows"
+        soft_fail: true
+
+  # ============================================================================
+  # PHASE 4: DOCUMENTATION
+  # ============================================================================
+  
+  - group: "Documentation Phase"
+    key: "documentation-phase"
+    depends_on: "testing-phase"
+    if: build.env("ENABLE_AUTO_DOCUMENTATION") == "true"
+    steps:
+      
+      - label: ":books: Generate terraform-docs"
+        key: "terraform-docs"
+        command: "powershell -ExecutionPolicy Bypass -File .buildkite/scripts/documentation/New-TerraformDocs.ps1"
+        artifact_paths:
+          - "README.md"
+          - "modules/*/README.md"
+          - "examples/*/README.md"
+        agents:
+          queue: "windows"
+
+      - label: ":mag: Check Documentation Drift"
+        key: "docs-drift"
+        depends_on: "terraform-docs"
+        command: "powershell -ExecutionPolicy Bypass -File .buildkite/scripts/documentation/Test-DocumentationDrift.ps1"
+        agents:
+          queue: "windows"
+        soft_fail: true
+
+  # ============================================================================
+  # PHASE 5: BREAKING CHANGE DETECTION
+  # ============================================================================
+  
+  - group: "Breaking Change Detection"
+    key: "breaking-change-phase"
+    depends_on: "documentation-phase"
+    if: build.env("ENABLE_BREAKING_CHANGE_DETECTION") == "true"
+    steps:
+      
+      - label: ":warning: Detect Breaking Changes"
+        key: "breaking-changes"
+        command: "powershell -ExecutionPolicy Bypass -File .buildkite/scripts/breaking-changes/Test-BreakingChanges.ps1"
+        artifact_paths:
+          - "version-bump-type.txt"
+        agents:
+          queue: "windows"
+
+  # ============================================================================
+  # PHASE 6: VERSIONING
+  # ============================================================================
+  
+  - group: "Versioning Phase"
+    key: "versioning-phase"
+    depends_on: "breaking-change-phase"
+    steps:
+      
+      - label: ":cliff: Generate Changelog Preview"
+        key: "changelog-preview"
+        command: "powershell -ExecutionPolicy Bypass -File .buildkite/scripts/versioning/Get-ChangelogPreview.ps1"
+        artifact_paths:
+          - "CHANGELOG-PREVIEW.md"
+        agents:
+          queue: "windows"
+
+      - label: ":calculator: Calculate Next Version"
+        key: "calculate-version"
+        command: "powershell -ExecutionPolicy Bypass -File .buildkite/scripts/versioning/Get-NextVersion.ps1"
+        artifact_paths:
+          - "next-version.txt"
+          - "version-type.txt"
+        agents:
+          queue: "windows"
+
+  # ============================================================================
+  # PHASE 7: RELEASE
+  # ============================================================================
+  
+  - block: ":rocket: Release Module?"
+    key: "approve-release"
+    depends_on: "versioning-phase"
+    prompt: "Create a new stable module release?"
+    if: build.branch == "main" && build.env("ENABLE_AUTO_BUMP") == "true"
+
+  - label: ":git: Tag & Release"
+    key: "create-release"
+    depends_on:
+      - "versioning-phase"
+      - "approve-release"
+    allow_dependency_failure: true
+    command: "powershell -ExecutionPolicy Bypass -File .buildkite/scripts/release/New-Release.ps1"
+    agents:
+      queue: "windows"
+
+  # ============================================================================
+  # PHASE 8: PUBLISH TO REGISTRY
+  # ============================================================================
+  
+  - label: ":package: Publish to Registry"
+    key: "publish-registry"
+    depends_on: "create-release"
+    command: "powershell -ExecutionPolicy Bypass -File .buildkite/scripts/release/Publish-Registry.ps1"
+    agents:
+      queue: "windows"
+
+  # ============================================================================
+  # PHASE 9: NOTIFICATIONS
+  # ============================================================================
+  
+  - label: ":bell: Notify Release"
+    key: "notify-release"
+    depends_on: "publish-registry"
+    allow_dependency_failure: true
+    command: "powershell -ExecutionPolicy Bypass -File .buildkite/scripts/release/Send-Notification.ps1"
+    agents:
+      queue: "windows"
